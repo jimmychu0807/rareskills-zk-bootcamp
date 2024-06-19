@@ -1,0 +1,1 @@
+# Rareskills zk-bootcamp (2024 June)

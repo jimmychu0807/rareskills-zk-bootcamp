@@ -115,4 +115,41 @@ contract Contract {
 
         verified = aG1.x == bG1.x && aG1.y == bG1.y;
     }
+
+    function matmul(uint256[] calldata matrix,
+        uint256 n, // n x n for the matrix
+        ECPoint[] calldata s, // n elements
+        uint256[] calldata o // n elements
+    ) public view returns (bool verified) {
+        // revert if dimensions don't make sense or the matrices are empty
+        require(n > 0, "n has to be larger than 0");
+        require(matrix.length == n * n, "mismatched matrix size");
+        require(s.length == n, "mismatched number of ECPoints");
+        require(o.length == n, "mismatched number of uint256 points");
+
+        ECPoint memory G1 = ECPoint(G1_x, G1_y);
+
+        // return true if Ms == o elementwise. You need to do n equality checks.
+        // If you're lazy, you can hardcode n to 3, but it is suggested that you do this with a for loop
+        for (uint256 i = 0; i < n; i++) {
+            // LHS calc
+            ECPoint[] memory ec_pts = new ECPoint[](n);
+            for (uint256 j = 0; j < n; j++) {
+                ec_pts[j] = scalar_mul(s[j], matrix[i * n + j]);
+            }
+            ECPoint memory acc = ec_pts[0];
+            for (uint j = 1; j < n; j++) {
+                acc = pt_add(acc, ec_pts[j]);
+            }
+
+            // RHS calc
+            ECPoint memory rhs = scalar_mul(G1, o[i]);
+            verified = acc.x == rhs.x && acc.y == rhs.y;
+            if (!verified) {
+                // can immediately return if the above equality doesn't hold.
+                return verified;
+            }
+        }
+        verified = true;
+    }
 }

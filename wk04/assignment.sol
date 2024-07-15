@@ -73,7 +73,7 @@ contract Contract {
         return abi.decode(res, (uint256));
     }
 
-    function rationalAdd(
+    function rationalAdd1(
         ECPoint calldata A,
         ECPoint calldata B,
         uint256 num,
@@ -99,5 +99,20 @@ contract Contract {
         G2Point memory dG2 = G2;
 
         verified = pairing(aG1, bG2, cG1, dG2);
+    }
+
+    function rationalAdd2(
+        ECPoint calldata A,
+        ECPoint calldata B,
+        uint256 num,
+        uint256 den
+    ) public view returns (bool verified) {
+        ECPoint memory aG1 = pt_add(A, B);
+
+        uint256 val = mulmod(num, mod_exp(den, curve_order - 2, curve_order), curve_order);
+        ECPoint memory G1 = ECPoint(G1_x, G1_y);
+        ECPoint memory bG1 = scalar_mul(G1, val);
+
+        verified = aG1.x == bG1.x && aG1.y == bG1.y;
     }
 }

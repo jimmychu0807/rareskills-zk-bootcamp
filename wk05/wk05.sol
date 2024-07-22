@@ -26,21 +26,21 @@ contract Homework5 {
 
     // constant alpha
     uint256 public  constant alpha_const = 5;
-    // beta in G2: 6G2
-    uint256 public constant beta_x1 = 10191129150170504690859455063377241352678147020731325090942140630855943625622;
-    uint256 public constant beta_x2 = 12345624066896925082600651626583520268054356403303305150512393106955803260718;
-    uint256 public constant beta_y1 = 16727484375212017249697795760885267597317766655549468217180521378213906474374;
-    uint256 public constant beta_y2 = 13790151551682513054696583104432356791070435696840691503641536676885931241944;
-    // gamma in G2
-    uint256 public constant gamma_x1 = 0;
-    uint256 public constant gamma_x2 = 0;
-    uint256 public constant gamma_y1 = 0;
-    uint256 public constant gamma_y2 = 0;
-    // delta in G2: 3G2
-    uint256 public constant delta_x1 = 2725019753478801796453339367788033689375851816420509565303521482350756874229;
-    uint256 public constant delta_x2 = 7273165102799931111715871471550377909735733521218303035754523677688038059653;
-    uint256 public constant delta_y1 = 2512659008974376214222774206987427162027254181373325676825515531566330959255;
-    uint256 public constant delta_y2 = 957874124722006818841961785324909313781880061366718538693995380805373202866;
+    // beta in G2: 5G2
+    uint256 public constant beta_x1 = 20954117799226682825035885491234530437475518021362091509513177301640194298072;
+    uint256 public constant beta_x2 = 4540444681147253467785307942530223364530218361853237193970751657229138047649;
+    uint256 public constant beta_y1 = 21508930868448350162258892668132814424284302804699005394342512102884055673846;
+    uint256 public constant beta_y2 = 11631839690097995216017572651900167465857396346217730511548857041925508482915;
+    // gamma in G2: 2G2
+    uint256 public constant gamma_x1 = 18029695676650738226693292988307914797657423701064905010927197838374790804409;
+    uint256 public constant gamma_x2 = 14583779054894525174450323658765874724019480979794335525732096752006891875705;
+    uint256 public constant gamma_y1 = 2140229616977736810657479771656733941598412651537078903776637920509952744750;
+    uint256 public constant gamma_y2 = 11474861747383700316476719153975578001603231366361248090558603872215261634898;
+    // delta in G2: 2G2
+    uint256 public constant delta_x1 = 18029695676650738226693292988307914797657423701064905010927197838374790804409;
+    uint256 public constant delta_x2 = 14583779054894525174450323658765874724019480979794335525732096752006891875705;
+    uint256 public constant delta_y1 = 2140229616977736810657479771656733941598412651537078903776637920509952744750;
+    uint256 public constant delta_y2 = 11474861747383700316476719153975578001603231366361248090558603872215261634898;
 
     function scalarMul(G1Point memory pt, uint256 s) public view returns (G1Point memory) {
         uint256[3] memory input;
@@ -53,21 +53,33 @@ contract Homework5 {
         return abi.decode(res, (G1Point));
     }
 
+    function ptAdd(G1Point memory pt1, G1Point memory pt2) public view returns (G1Point memory) {
+        uint256[4] memory input;
+        input[0] = pt1.x;
+        input[1] = pt1.y;
+        input[2] = pt2.x;
+        input[3] = pt2.y;
+        (bool ok, bytes memory res) = address(0x06).staticcall(abi.encode(input));
+        require(ok);
+
+        return abi.decode(res, (G1Point));
+    }
+
     function pairing(
-        G1Point memory aG1,
-        G2Point memory bG2,
-        G1Point memory cG1,
-        G2Point memory dG2,
-        G1Point memory eG1,
-        G2Point memory fG2
+        G1Point memory aG1, G2Point memory bG2,
+        G1Point memory cG1, G2Point memory dG2,
+        G1Point memory eG1, G2Point memory fG2,
+        G1Point memory gG1, G2Point memory hG2
     ) public view returns (bool) {
-        uint256[18] memory input = [
+        uint256[24] memory input = [
             aG1.x, aG1.y,
             bG2.x2, bG2.x1, bG2.y2, bG2.y1,
             cG1.x, cG1.y,
             dG2.x2, dG2.x1, dG2.y2, dG2.y1,
             eG1.x, eG1.y,
-            fG2.x2, fG2.x1, fG2.y2, fG2.y1
+            fG2.x2, fG2.x1, fG2.y2, fG2.y1,
+            gG1.x, gG1.y,
+            hG2.x2, hG2.x1, hG2.y2, hG2.y1
         ];
         (bool ok, bytes memory res) = address(0x08).staticcall(abi.encode(input));
         require(ok);
@@ -78,18 +90,21 @@ contract Homework5 {
     function main(
         G1Point calldata A1,
         G2Point calldata B2,
-        G1Point calldata C1
-        // uint256 x1,
-        // uint256 x2,
-        // uint256 x3
+        G1Point calldata C1,
+        uint256 x1,
+        uint256 x2,
+        uint256 x3
     ) public view returns (bool) {
-        G1Point memory alpha = scalarMul(G1Point(G1_x, G1_y), alpha_const);
-        G2Point memory beta = G2Point(beta_x1, beta_x2, beta_y1, beta_y2);
+        G1Point memory g1 = G1Point(G1_x, G1_y);
 
+        G1Point memory alpha = scalarMul(g1, alpha_const);
+        G2Point memory beta = G2Point(beta_x1, beta_x2, beta_y1, beta_y2);
+        G2Point memory gamma = G2Point(gamma_x1, gamma_x2, gamma_y1, gamma_y2);
         G2Point memory delta = G2Point(delta_x1, delta_x2, delta_y1, delta_y2);
 
+        G1Point memory X = ptAdd(ptAdd(scalarMul(g1, x1), scalarMul(g1, x2)), scalarMul(g1, x3));
         G1Point memory negA1 = scalarMul(A1, curve_order - 1);
-        bool result = pairing(negA1, B2, alpha, beta, C1, delta);
+        bool result = pairing(negA1, B2, alpha, beta, X, gamma, C1, delta);
 
         return result;
     }
@@ -112,4 +127,15 @@ contract Homework5 {
         [9029403783378787853997717420738421556814147177180364590697173291656229463431, 757763506634636222198457474118983919632880922091637496692377079250063651595, 144608159719011942507868083402155826875845015828284370329399644722076982703, 5329243461463493295212542252749728893088827844451654683091781486904081692016]
     C1: 5G1:
         [10744596414106452074759370245733544594153395043370666422502510773307029471145, 848677436511517736191562425154572367705380862894644942948681172815252343932]
+
+  - For (A1, B2, alpha, beta, X1, gamma, C1, delta)
+    pairing((- 3G1 * 15G2), (5G1 * 5G2), (5G1 * 2G2), (5G1 * 2G2))
+    alpha: 5G1, beta: 5G2, gamma: 2G2, delta: 2G2
+    A1: 3G1:
+        [3353031288059533942658390886683067124040920775575537747144343083137631628272, 19321533766552368860946552437480515441416830039777911637913418824951667761761]
+    B2: 15G2:
+        [9029403783378787853997717420738421556814147177180364590697173291656229463431, 757763506634636222198457474118983919632880922091637496692377079250063651595, 144608159719011942507868083402155826875845015828284370329399644722076982703, 5329243461463493295212542252749728893088827844451654683091781486904081692016]
+    C1: 5G1:
+        [10744596414106452074759370245733544594153395043370666422502510773307029471145, 848677436511517736191562425154572367705380862894644942948681172815252343932]
+    x1: 1, x2: 2, x3: 2
 */

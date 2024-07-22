@@ -1,0 +1,115 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >= 0.8.23;
+
+struct G1Point {
+    uint256 x;
+    uint256 y;
+}
+
+struct G2Point {
+    uint256 x1;
+    uint256 x2;
+    uint256 y1;
+    uint256 y2;
+}
+
+contract Homework5 {
+    // bn128 curve
+    uint256 private constant curve_order =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    uint256 private constant G1_x = 1;
+    uint256 private constant G1_y = 2;
+    uint256 private constant G2_x1 = 11559732032986387107991004021392285783925812861821192530917403151452391805634;
+    uint256 private constant G2_x2 = 10857046999023057135944570762232829481370756359578518086990519993285655852781;
+    uint256 private constant G2_y1 = 4082367875863433681332203403145435568316851327593401208105741076214120093531;
+    uint256 private constant G2_y2 = 8495653923123431417604973247489272438418190587263600148770280649306958101930;
+
+    // constant alpha
+    uint256 public  constant alpha_const = 5;
+    // beta in G2: 6G2
+    uint256 public constant beta_x1 = 10191129150170504690859455063377241352678147020731325090942140630855943625622;
+    uint256 public constant beta_x2 = 12345624066896925082600651626583520268054356403303305150512393106955803260718;
+    uint256 public constant beta_y1 = 16727484375212017249697795760885267597317766655549468217180521378213906474374;
+    uint256 public constant beta_y2 = 13790151551682513054696583104432356791070435696840691503641536676885931241944;
+    // gamma in G2
+    uint256 public constant gamma_x1 = 0;
+    uint256 public constant gamma_x2 = 0;
+    uint256 public constant gamma_y1 = 0;
+    uint256 public constant gamma_y2 = 0;
+    // delta in G2: 3G2
+    uint256 public constant delta_x1 = 2725019753478801796453339367788033689375851816420509565303521482350756874229;
+    uint256 public constant delta_x2 = 7273165102799931111715871471550377909735733521218303035754523677688038059653;
+    uint256 public constant delta_y1 = 2512659008974376214222774206987427162027254181373325676825515531566330959255;
+    uint256 public constant delta_y2 = 957874124722006818841961785324909313781880061366718538693995380805373202866;
+
+    function scalarMul(G1Point memory pt, uint256 s) public view returns (G1Point memory) {
+        uint256[3] memory input;
+        input[0] = pt.x;
+        input[1] = pt.y;
+        input[2] = s;
+        (bool ok, bytes memory res) = address(0x07).staticcall(abi.encode(input));
+        require(ok);
+
+        return abi.decode(res, (G1Point));
+    }
+
+    function pairing(
+        G1Point memory aG1,
+        G2Point memory bG2,
+        G1Point memory cG1,
+        G2Point memory dG2,
+        G1Point memory eG1,
+        G2Point memory fG2
+    ) public view returns (bool) {
+        uint256[18] memory input = [
+            aG1.x, aG1.y,
+            bG2.x2, bG2.x1, bG2.y2, bG2.y1,
+            cG1.x, cG1.y,
+            dG2.x2, dG2.x1, dG2.y2, dG2.y1,
+            eG1.x, eG1.y,
+            fG2.x2, fG2.x1, fG2.y2, fG2.y1
+        ];
+        (bool ok, bytes memory res) = address(0x08).staticcall(abi.encode(input));
+        require(ok);
+
+        return abi.decode(res, (bool));
+    }
+
+    function main(
+        G1Point calldata A1,
+        G2Point calldata B2,
+        G1Point calldata C1
+        // uint256 x1,
+        // uint256 x2,
+        // uint256 x3
+    ) public view returns (bool) {
+        G1Point memory alpha = scalarMul(G1Point(G1_x, G1_y), alpha_const);
+        G2Point memory beta = G2Point(beta_x1, beta_x2, beta_y1, beta_y2);
+
+        G2Point memory delta = G2Point(delta_x1, delta_x2, delta_y1, delta_y2);
+
+        G1Point memory negA1 = scalarMul(A1, curve_order - 1);
+        bool result = pairing(negA1, B2, alpha, beta, C1, delta);
+
+        return result;
+    }
+}
+
+/*
+  Test Cases:
+  - For (A1, B2, alpha, beta)
+    alpha: 5G1, beta: 6G2
+    A1: 3G1:
+        [3353031288059533942658390886683067124040920775575537747144343083137631628272, 19321533766552368860946552437480515441416830039777911637913418824951667761761]
+    B2: 10G2:
+        [14502447760486387799059318541209757040844770937862468921929310682431317530875, 2443430939986969712743682923434644543094899517010817087050769422599268135103, 11721331165636005533649329538372312212753336165656329339895621434122061690013, 4704672529862198727079301732358554332963871698433558481208245291096060730807]
+
+  - For (A1, B2, alpha, beta, C1, delta)
+    alpha: 5G1, beta: 6G2, delta: 3G2
+    A1: 3G1:
+        [3353031288059533942658390886683067124040920775575537747144343083137631628272, 19321533766552368860946552437480515441416830039777911637913418824951667761761]
+    B2: 15G2:
+        [9029403783378787853997717420738421556814147177180364590697173291656229463431, 757763506634636222198457474118983919632880922091637496692377079250063651595, 144608159719011942507868083402155826875845015828284370329399644722076982703, 5329243461463493295212542252749728893088827844451654683091781486904081692016]
+    C1: 5G1:
+        [10744596414106452074759370245733544594153395043370666422502510773307029471145, 848677436511517736191562425154572367705380862894644942948681172815252343932]
+*/

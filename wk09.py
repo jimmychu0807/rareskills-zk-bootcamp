@@ -16,12 +16,6 @@ def trusted_setup(degree, GF, tau = None):
 def ecc_eval(poly: galois.Poly, g_pp, zero_g):
     coeffs = poly.coeffs
     degrees = poly.degrees
-
-    print(f"coeffs: {coeffs}")
-    print(f"degrees: {degrees}")
-    print(f"poly: {poly}")
-    print(f"g_pp: {g_pp}")
-
     result = zero_g
     for idx, deg in enumerate(degrees):
         result = add(result, multiply(g_pp[deg], int(coeffs[idx])))

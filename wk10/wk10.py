@@ -1,17 +1,25 @@
 import numpy as np
 from functools import reduce
-from py_ecc.bn128 import G1, G2, Z1, Z2, Z1, multiply, add, curve_order, pairing
+from py_ecc.bn128 import G1, G2, Z1, Z2, Z1, multiply, add, neg, is_inf, curve_order, pairing
 import secrets
 import galois
 
-def trusted_setup(degree, GF, tau = None):
-    if tau is None:
-        # A rand between [1, ... GF_order - 1] inclusively
-        tau = secrets.randbelow(GF.order - 1) + 1
+# alpha_g1, beta_g2, srs_g1, srs_g2, psi = trusted_setup(HT.degree, GF, U, V, W, T, tau, alpha, beta)
+def trusted_setup(degree, GF, U, V, W, T, tau = None, alpha = None, beta = None):
+    """
+    Generate the trusted setup parameters
+    """
+    if tau is None: tau = secrets.randbelow(GF.order - 1) + 1
+    if alpha is None: alpha = secrets.randbelow(GF.order - 1) + 1
+    if beta is None: beta = secrets.randbelow(GF.order - 1) + 1
 
-    g1_pts = [multiply(G1, int((GF(tau) ** p))) for p in range(degree + 1)]
-    g2_pts = [multiply(G2, int((GF(tau) ** p))) for p in range(degree + 1)]
-    return (g1_pts, g2_pts)
+    alpha_g1 = multiply(G1, alpha)
+    beta_g2 = multiply(G2, beta)
+    srs_g1 = [multiply(G1, int((GF(tau) ** p))) for p in range(degree + 1)]
+    srs_g2 = [multiply(G2, int((GF(tau) ** p))) for p in range(degree + 1)]
+    psi_g1 = [multiply(G1, alpha * V[d](tau) + beta * U[d](tau) + W[d](tau)) for d in range(U.degree + 1)]
+
+    return (alpha_g1, beta_g2, srs_g1, srs_g2, psi_g1)
 
 def ecc_eval(poly: galois.Poly, g_pp, zero_g):
     coeffs = poly.coeffs
@@ -73,7 +81,6 @@ def r1cs_to_qap(L: np.array, R: np.array, O: np.array, w: np.array, GF: galois.F
         """
         return galois.Poly.Roots(list(range(1, poly.degree)), field = GF)
 
-
     Lg = GF(L)
     Rg = GF(R)
     Og = GF(O)
@@ -97,14 +104,14 @@ def r1cs_to_qap(L: np.array, R: np.array, O: np.array, w: np.array, GF: galois.F
 def main():
     # Define the Galois field
     print("Initializing galois field...")
-    # For testing, switch to use a smaller field as below:
+    # For testing, switch to use a smaller field as below. Switch to `curve_order` when ready.
     p = 59567
     # p = curve_order
     GF = galois.GF(p)
 
     # Formula
     # out = 3x²y + 5xy - x - 2y + 3
-    # witness = {x: 100, y: 100}
+    witness = { "x": 100, "y": 100 }
 
     # Define the matrices
     L = np.array([[0,0,3,0,0,0],
@@ -122,8 +129,8 @@ def main():
     print("Computing witness and Lg, Rg, Og...")
 
     # Define the witness
-    x = to_galois(100, GF)
-    y = to_galois(100, GF)
+    x = to_galois(witness["x"], GF)
+    y = to_galois(witness["y"], GF)
     v1 = to_galois(3, GF) * x * x
     v2 = v1 * y
     out = v2 + to_galois(5, GF) * x * y - x - to_galois(2, GF) * y + to_galois(3, GF)
@@ -142,22 +149,25 @@ def main():
     print("Performing trusted setup...")
 
     # HT polynomial has the highest degree no. among (U, V, W, HT)
-    g1_pp, g2_pp = trusted_setup(HT.degree, GF, U, V, W, T)
+    alpha_g1, beta_g2, srs_g1, srs_g2, psi_g1 = trusted_setup(HT.degree, GF, U, V, W, T)
 
-    print("Performing ecc computation on U, V, W, HT")
+    print("Performing prover steps (ecc computation)...")
 
-    Ug1 = ecc_eval(U, g1_pp, Z1)
-    Vg2 = ecc_eval(V, g2_pp, Z2)
-    Wg1 = ecc_eval(W, g1_pp, Z1)
-    HTg1 = ecc_eval(HT, g1_pp, Z1)
+    A_g1 = add(alpha_g1, ecc_eval(U, srs_g1, Z1))
+    B_g2 = add(beta_g2, ecc_eval(V, srs_g2, Z2))
 
-    print("Performing 2 ecc pairings...")
+    HT_g1 = ecc_eval(HT, srs_g1, Z1)
+    C_g1 = add(ecc_eval(psi_g1, srs_g1, Z1), HT_g1)
 
-    # Check if pairing (Vg2, Ug1) == pairing(G2, Wg1 + HTg1)
-    lhs = pairing(Vg2, Ug1)
-    rhs = pairing(G2, add(Wg1, HTg1))
-    assert lhs == rhs, "pairing(Ug1, Vg2) != pairing(Wg1 + HTg1, G2)"
+    print("Performing verifier steps...")
 
-    print("pairing(Ug1, Vg2) == pairing(Wg1 + HTg1, G2)")
+    # Check if I₁₂ == neg([A]₁)·[B]₂ + [α]₁·[β]₂ + [C]₁·G₂
+    first_term = pairing(B_g2, neg(A_g1))
+    second_term = pairing(beta_g2, alpha_g1)
+    third_term = pairing(G2, C_g1)
+    summed = add(add(first_term, second_term), third_term)
+    assert is_inf(summed), "I₁₂ != neg([A]₁)·[B]₂ + [α]₁·[β]₂ + [C]₁·G₂"
+
+    print("I₁₂ == neg([A]₁)·[B]₂ + [α]₁·[β]₂ + [C]₁·G₂")
 
 main()

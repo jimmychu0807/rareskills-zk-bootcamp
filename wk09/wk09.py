@@ -104,7 +104,7 @@ def main():
 
     # Formula
     # out = 3x²y + 5xy - x - 2y + 3
-    # witness = {x: 100, y: 100}
+    witness = {"x": 100, "y": 100}
     
     # Define the matrices
     L = np.array([[0,0,3,0,0,0],
@@ -122,8 +122,8 @@ def main():
     print("Computing witness and Lg, Rg, Og...")
 
     # Define the witness
-    x = to_galois(100, GF)
-    y = to_galois(100, GF)
+    x = to_galois(witness["x"], GF)
+    y = to_galois(witness["y"], GF)
     v1 = to_galois(3, GF) * x * x
     v2 = v1 * y
     out = v2 + to_galois(5, GF) * x * y - x - to_galois(2, GF) * y + to_galois(3, GF)

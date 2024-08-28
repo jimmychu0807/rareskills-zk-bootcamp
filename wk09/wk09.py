@@ -156,8 +156,8 @@ def main():
     # Check if pairing (Vg2, Ug1) == pairing(G2, Wg1 + HTg1)
     lhs = pairing(Vg2, Ug1)
     rhs = pairing(G2, add(Wg1, HTg1))
-    assert lhs == rhs, "pairing (Ug1, Vg2) != pairing(Wg1 + HTg1, G2)"
+    assert lhs == rhs, "pairing(Ug1, Vg2) != pairing(Wg1 + HTg1, G2)"
 
-    print("pairing (Ug1, Vg2) == pairing(Wg1 + HTg1, G2)")
+    print("pairing(Ug1, Vg2) == pairing(Wg1 + HTg1, G2)")
 
 main()

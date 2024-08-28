@@ -1,6 +1,6 @@
 import numpy as np
 from functools import reduce
-from py_ecc.bn128 import G1, G2, Z1, Z2, Z1, multiply, add, eq, curve_order, pairing
+from py_ecc.bn128 import G1, G2, Z1, Z2, Z1, multiply, add, curve_order, pairing
 import secrets
 import galois
 
@@ -96,12 +96,16 @@ def r1cs_to_qap(L: np.array, R: np.array, O: np.array, w: np.array, GF: galois.F
 
 def main():
     # Define the Galois field
-    print(f"Initializing galois field...")
-
+    print("Initializing galois field...")
     # For testing, switch to use a smaller field as below:
-    # GF = galois.GF(79)
-    GF = galois.GF(curve_order)
+    # p = 59567
+    p = curve_order
+    GF = galois.GF(p)
 
+    # Formula
+    # out = 3x²y + 5xy - x - 2y + 3
+    # witness = {x: 100, y: 100}
+    
     # Define the matrices
     L = np.array([[0,0,3,0,0,0],
                   [0,0,0,0,1,0],
@@ -115,9 +119,9 @@ def main():
                   [0,0,0,0,0,1],
                   [-3,1,1,2,0,-1]], dtype="object")
 
-    print(f"Computing witness and Lg, Rg, Og...")
+    print("Computing witness and Lg, Rg, Og...")
 
-    # witness
+    # Define the witness
     x = to_galois(100, GF)
     y = to_galois(100, GF)
     v1 = to_galois(3, GF) * x * x
@@ -130,28 +134,30 @@ def main():
     Rg = GF(np.array([[to_galois(x, GF) for x in row] for row in R], dtype="object"))
     Og = GF(np.array([[to_galois(x, GF) for x in row] for row in O], dtype="object"))
 
-    print(f"Converting r1cs to qap...")
+    print("Converting r1cs to qap...")
 
     U, V, W, H, T = r1cs_to_qap(Lg, Rg, Og, witness, GF)
     HT = H * T
 
-    print(f"Performing trusted setup...")
+    print("Performing trusted setup...")
 
     # HT polynomial has the highest degree no. among (U, V, W, HT)
     g1_pp, g2_pp = trusted_setup(HT.degree, GF)
 
-    print(f"Performing ecc computation on U, V, W, HT")
+    print("Performing ecc computation on U, V, W, HT")
 
     Ug1 = ecc_eval(U, g1_pp, Z1)
     Vg2 = ecc_eval(V, g2_pp, Z2)
     Wg1 = ecc_eval(W, g1_pp, Z1)
     HTg1 = ecc_eval(HT, g1_pp, Z1)
 
-    print(f"Performing 2 ecc pairings...")
+    print("Performing 2 ecc pairings...")
 
     # Check if pairing (Vg2, Ug1) == pairing(G2, Wg1 + HTg1)
     lhs = pairing(Vg2, Ug1)
     rhs = pairing(G2, add(Wg1, HTg1))
     assert lhs == rhs, "pairing (Ug1, Vg2) != pairing(Wg1 + HTg1, G2)"
+
+    print("pairing (Ug1, Vg2) == pairing(Wg1 + HTg1, G2)")
 
 main()

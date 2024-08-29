@@ -1,11 +1,10 @@
 import numpy as np
 from functools import reduce
-from py_ecc.bn128 import G1, G2, Z1, Z2, Z1, multiply, add, neg, is_inf, curve_order, pairing
+from py_ecc.bn128 import G1, G2, Z1, Z2, FQ12, multiply, add, neg, is_inf, curve_order, pairing, final_exponentiate
 import secrets
 import galois
 
-# alpha_g1, beta_g2, srs_g1, srs_g2, psi = trusted_setup(HT.degree, GF, U, V, W, T, tau, alpha, beta)
-def trusted_setup(degree, GF, U, V, W, T, tau = None, alpha = None, beta = None):
+def trusted_setup(degree, GF, U, V, W, tau = None, alpha = None, beta = None):
     """
     Generate the trusted setup parameters
     """
@@ -17,9 +16,11 @@ def trusted_setup(degree, GF, U, V, W, T, tau = None, alpha = None, beta = None)
     beta_g2 = multiply(G2, beta)
     srs_g1 = [multiply(G1, int((GF(tau) ** p))) for p in range(degree + 1)]
     srs_g2 = [multiply(G2, int((GF(tau) ** p))) for p in range(degree + 1)]
-    psi_g1 = [multiply(G1, alpha * V[d](tau) + beta * U[d](tau) + W[d](tau)) for d in range(U.degree + 1)]
 
-    return (alpha_g1, beta_g2, srs_g1, srs_g2, psi_g1)
+    psi = [alpha * V[col] + beta * U[col] + W[col] for col in range(len(U))]
+    psi_solved_g1 = [multiply(G1, int(p(tau))) for p in psi]
+
+    return (alpha_g1, beta_g2, srs_g1, srs_g2, psi_solved_g1)
 
 def ecc_eval(poly: galois.Poly, g_pp, zero_g):
     coeffs = poly.coeffs
@@ -42,6 +43,11 @@ def to_galois(n: int, GF: galois.FieldArray):
     while positive >= GF.order: positive -= GF.order
     return GF(positive)
 
+def print_polys(poly_arr, prefix = None):
+    for idx, poly in enumerate(poly_arr):
+        print(f"{prefix}[{idx}]: {poly}")
+
+
 def r1cs_to_qap(L: np.array, R: np.array, O: np.array, w: np.array, GF: galois.FieldArray) -> (np.array, np.array, np.array, np.array, np.array):
     """
     Convert an R1CS to QAP. All the computation is done in finite field
@@ -53,11 +59,8 @@ def r1cs_to_qap(L: np.array, R: np.array, O: np.array, w: np.array, GF: galois.F
     O (np.array): m x n array, wrapped in Galois field
     w (np.array): n x 1 vector, wrapped in Galois field
     GF (galois.FieldArray): The finite field order
-
-    Returns:
-
-    Raises:
     """
+
     # Check for the params size
     if (L.ndim != 2 or R.ndim != 2 or O.ndim != 2 or w.ndim != 1
         or L.shape[0] != R.shape[0] or R.shape[0] != O.shape[0]
@@ -77,7 +80,9 @@ def r1cs_to_qap(L: np.array, R: np.array, O: np.array, w: np.array, GF: galois.F
 
     def get_t_poly(poly: galois.Poly) -> galois.Poly:
         """
-        The return value is a polynomial with deg(poly) - 1
+        Returns:
+        The return value is a polynomial with deg(poly) - 1. We want to leave one degree of freedom
+        for h(x).
         """
         return galois.Poly.Roots(list(range(1, poly.degree)), field = GF)
 
@@ -99,19 +104,28 @@ def r1cs_to_qap(L: np.array, R: np.array, O: np.array, w: np.array, GF: galois.F
     T = get_t_poly(result_poly)
     H = result_poly // T
 
-    return (Uw, Vw, Ww, H, T)
+    return (Uw, Vw, Ww, U, V, W, H, T)
+
+def sum_of_product(g1s, w):
+    if (len(g1s) != len(w)): raise Exception("sum_of_product parameter sizes not equal.")
+
+    mul_ = lambda i: multiply(g1s[i], int(w[i]))
+    sum_ = lambda x, y: add(x, y)
+    result = reduce(sum_, map(mul_, [i for i in range(len(g1s))]))
+
+    return result
 
 def main():
     # Define the Galois field
     print("Initializing galois field...")
     # For testing, switch to use a smaller field as below. Switch to `curve_order` when ready.
-    p = 59567
-    # p = curve_order
+    # p = 59567
+    p = curve_order
     GF = galois.GF(p)
 
     # Formula
     # out = 3x²y + 5xy - x - 2y + 3
-    witness = { "x": 100, "y": 100 }
+    secret = { "x": 100, "y": 100 }
 
     # Define the matrices
     L = np.array([[0,0,3,0,0,0],
@@ -129,8 +143,8 @@ def main():
     print("Computing witness and Lg, Rg, Og...")
 
     # Define the witness
-    x = to_galois(witness["x"], GF)
-    y = to_galois(witness["y"], GF)
+    x = to_galois(secret["x"], GF)
+    y = to_galois(secret["y"], GF)
     v1 = to_galois(3, GF) * x * x
     v2 = v1 * y
     out = v2 + to_galois(5, GF) * x * y - x - to_galois(2, GF) * y + to_galois(3, GF)
@@ -143,31 +157,30 @@ def main():
 
     print("Converting r1cs to qap...")
 
-    U, V, W, H, T = r1cs_to_qap(Lg, Rg, Og, witness, GF)
+    Uw, Vw, Ww, U, V, W, H, T = r1cs_to_qap(Lg, Rg, Og, witness, GF)
     HT = H * T
 
     print("Performing trusted setup...")
 
     # HT polynomial has the highest degree no. among (U, V, W, HT)
-    alpha_g1, beta_g2, srs_g1, srs_g2, psi_g1 = trusted_setup(HT.degree, GF, U, V, W, T)
+    alpha_g1, beta_g2, srs_g1, srs_g2, psi_g1 = trusted_setup(HT.degree, GF, U, V, W)
 
     print("Performing prover steps (ecc computation)...")
 
-    A_g1 = add(alpha_g1, ecc_eval(U, srs_g1, Z1))
-    B_g2 = add(beta_g2, ecc_eval(V, srs_g2, Z2))
+    A_g1 = add(alpha_g1, ecc_eval(Uw, srs_g1, Z1))
+    B_g2 = add(beta_g2, ecc_eval(Vw, srs_g2, Z2))
 
     HT_g1 = ecc_eval(HT, srs_g1, Z1)
-    C_g1 = add(ecc_eval(psi_g1, srs_g1, Z1), HT_g1)
+    C_g1 = add(sum_of_product(psi_g1, witness), HT_g1)
 
     print("Performing verifier steps...")
 
     # Check if I₁₂ == neg([A]₁)·[B]₂ + [α]₁·[β]₂ + [C]₁·G₂
-    first_term = pairing(B_g2, neg(A_g1))
-    second_term = pairing(beta_g2, alpha_g1)
-    third_term = pairing(G2, C_g1)
-    summed = add(add(first_term, second_term), third_term)
-    assert is_inf(summed), "I₁₂ != neg([A]₁)·[B]₂ + [α]₁·[β]₂ + [C]₁·G₂"
+    A_B = pairing(B_g2, neg(A_g1))
+    alpha_beta = pairing(beta_g2, alpha_g1)
+    C_G2 = pairing(G2, C_g1)
 
-    print("I₁₂ == neg([A]₁)·[B]₂ + [α]₁·[β]₂ + [C]₁·G₂")
+    # Performing F12 field arithmetic: https://ethereum.stackexchange.com/questions/158662/how-to-add-fq12-points-result-of-pairings-when-using-ethereums-py-ecc-libra
+    print("I₁₂ == neg([A]₁)·[B]₂ + [α]₁·[β]₂ + [C]₁·G₂:", FQ12.one() == final_exponentiate(A_B * alpha_beta * C_G2))
 
 main()

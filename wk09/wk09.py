@@ -93,10 +93,7 @@ def r1cs_to_qap(L: np.array, R: np.array, O: np.array, w: np.array, GF: galois.F
 def main():
     # Define the Galois field
     print("Initializing galois field...")
-    # For testing, switch to use a smaller field as below:
-    # p = 59567
-    p = curve_order
-    GF = galois.GF(p)
+    GF = galois.GF(curve_order)
 
     # Formula
     # out = 3x²y + 5xy - x - 2y + 3

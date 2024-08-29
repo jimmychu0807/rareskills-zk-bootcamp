@@ -118,10 +118,7 @@ def sum_of_product(g1s, w):
 def main():
     # Define the Galois field
     print("Initializing galois field...")
-    # For testing, switch to use a smaller field as below. Switch to `curve_order` when ready.
-    # p = 59567
-    p = curve_order
-    GF = galois.GF(p)
+    GF = galois.GF(curve_order)
 
     # Formula
     # out = 3x²y + 5xy - x - 2y + 3

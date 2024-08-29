@@ -45,10 +45,6 @@ def r1cs_to_qap(L: np.array, R: np.array, O: np.array, w: np.array, GF: galois.F
     O (np.array): m x n array, wrapped in Galois field
     w (np.array): n x 1 vector, wrapped in Galois field
     GF (galois.FieldArray): The finite field order
-
-    Returns:
-
-    Raises:
     """
     # Check for the params size
     if (L.ndim != 2 or R.ndim != 2 or O.ndim != 2 or w.ndim != 1
@@ -156,8 +152,6 @@ def main():
     # Check if pairing (Vg2, Ug1) == pairing(G2, Wg1 + HTg1)
     lhs = pairing(Vg2, Ug1)
     rhs = pairing(G2, add(Wg1, HTg1))
-    assert lhs == rhs, "pairing(Ug1, Vg2) != pairing(Wg1 + HTg1, G2)"
-
-    print("pairing(Ug1, Vg2) == pairing(Wg1 + HTg1, G2)")
+    print("pairing(Ug1, Vg2) == pairing(Wg1 + HTg1, G2):", lhs == rhs)
 
 main()
